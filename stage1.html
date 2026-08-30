@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>iSAMS Seating Planner - Stage 1 Diagnostic</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f4f6f8;color:#18202a;margin:0}
+main{max-width:800px;margin:40px auto;padding:24px}
+.card{background:#fff;border:1px solid #d8dee6;border-radius:12px;padding:24px}
+button{font:inherit;padding:12px 18px;border-radius:8px;border:1px solid #b9c2ce;background:#285bd6;color:#fff;cursor:pointer}
+#status{margin-top:18px;padding:12px;border-radius:8px;background:#eef1f5}
+.ok{background:#e9f7ee!important;color:#17683a}
+</style>
+</head>
+<body>
+<main>
+<div class="card">
+<h1>iSAMS Seating Planner</h1>
+<p><strong>Stage 1 diagnostic — Build 0.2.0</strong></p>
+<p>This page contains no parser. It is only testing that the browser can execute this file.</p>
+<button type="button" onclick="var s=document.getElementById('status');s.textContent='SELF-TEST PASSED - this file is executing JavaScript correctly.';s.className='ok';">Run self-test</button>
+<div id="status">Ready.</div>
+</div>
+</main>
+</body>
+</html>
