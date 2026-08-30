@@ -1,87 +1,164 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Seating Plan — Import Test</title><style>body{font-family:system-ui;margin:0;background:#f5f7fa;color:#18202a}main{max-width:900px;margin:auto;padding:32px 20px}.box{background:white;border:1px solid #ddd;border-radius:12px;padding:24px;margin:16px 0}button,label{display:inline-block;padding:11px 16px;border:1px solid #bbb;border-radius:8px;background:#fff;cursor:pointer}label{background:#285bd6;color:#fff;border-color:#285bd6}input{position:absolute;left:-9999px}.status{margin-top:16px;padding:12px;border-radius:8px;background:#eee}.ok{background:#e9f7ee;color:#17683a}.bad{background:#fff0f0;color:#9e2929}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px;border-bottom:1px solid #ddd}.photo{width:55px;height:65px;object-fit:cover;border-radius:6px}.hidden{display:none}</style></head><body><main><h1>iSAMS Import Test</h1><p>This is Stage 1: local iSAMS report parsing. Files are processed in your browser and are not uploaded.</p><div class="box"><h2>1. Test the app</h2><button id="test" type="button">Run self-test</button><div id="status" class="status">JavaScript loaded: yes. Ready.</div></div><div class="box"><h2>2. Import an iSAMS report</h2><label for="file">Choose HTML / MHT / MHTML</label><input id="file" type="file" accept=".html,.htm,.mht,.mhtml,text/html,application/x-mimearchive"><div id="result" class="hidden"></div></div></main><script>
-(function(){
-  'use strict';
-  var status=document.getElementById('status');
-  var fileInput=document.getElementById('file');
-  var result=document.getElementById('result');
-  function setStatus(text,kind){status.textContent=text;status.className='status '+(kind||'');}
-  function text(el){return (el&&el.textContent||'').replace(/\s+/g,' ').trim();}
-  function headerKey(s){return text({textContent:s}).toLowerCase().replace(/:/g,'');}
-  function findStudentTable(doc){
-    var tables=Array.prototype.slice.call(doc.querySelectorAll('table'));
-    for(var i=0;i<tables.length;i++){
-      var rows=tables[i].querySelectorAll('tr');
-      for(var r=0;r<rows.length;r++){
-        var vals=Array.prototype.slice.call(rows[r].querySelectorAll('td,th')).map(text).map(headerKey);
-        if(vals.indexOf('surname')!==-1 && vals.indexOf('preferred name')!==-1) return tables[i];
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seating Plan - Stage 1 Import Test</title>
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#f5f7fa;color:#18202a}main{max-width:900px;margin:auto;padding:32px 20px}.card{background:#fff;border:1px solid #d9dee7;border-radius:12px;padding:24px;margin-bottom:16px}button,label{font:inherit;padding:11px 16px;border:1px solid #bcc5d1;border-radius:8px;background:#fff;cursor:pointer;display:inline-block}label{background:#285bd6;color:#fff;border-color:#285bd6}input[type=file]{position:absolute;left:-9999px;width:1px;height:1px}.status{margin-top:16px;padding:12px;border-radius:8px;background:#eef1f5}.ok{background:#e9f7ee;color:#17683a}.bad{background:#fff0f0;color:#9e2929}.hidden{display:none}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{text-align:left;padding:8px;border-bottom:1px solid #ddd;vertical-align:top}.small{color:#697584;font-size:14px}.fields{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.field{background:#f0f2f5;border:1px solid #d9dee7;border-radius:999px;padding:4px 8px;font-size:13px}@media(max-width:600px){main{padding:18px 12px}.card{padding:18px}}
+</style>
+</head>
+<body>
+<main>
+<div class="card">
+<h1>iSAMS Seating Planner</h1>
+<p>Stage 1: prove the browser can read an iSAMS report locally.</p>
+<p><strong>JavaScript:</strong> <span id="jsStatus">loading...</span></p>
+<button id="selfTest" type="button">Run self-test</button>
+</div>
+
+<div class="card">
+<h2>Import report</h2>
+<p class="small">Choose an iSAMS HTML, MHT or MHTML file. The file is read only in this browser.</p>
+<label for="fileInput">Choose iSAMS file</label>
+<input id="fileInput" type="file" accept=".html,.htm,.mht,.mhtml">
+<div id="status" class="status">No file selected.</div>
+</div>
+
+<div id="result" class="card hidden"></div>
+</main>
+<script>
+"use strict";
+
+var jsStatus=document.getElementById("jsStatus");
+var statusBox=document.getElementById("status");
+var resultBox=document.getElementById("result");
+var fileInput=document.getElementById("fileInput");
+
+jsStatus.textContent="loaded";
+
+function clean(value){
+  return String(value || "").replace(/\s+/g," ").replace(/\u00a0/g," ").trim();
+}
+
+function setStatus(message, ok){
+  statusBox.textContent=message;
+  statusBox.className="status"+(ok===true?" ok":ok===false?" bad":"");
+}
+
+function parseHtmlReport(raw){
+  var doc=new DOMParser().parseFromString(raw,"text/html");
+  var tables=Array.prototype.slice.call(doc.querySelectorAll("table"));
+  var table=null, headerRow=null, headers=[];
+
+  for(var i=0;i<tables.length && !table;i++){
+    var rows=Array.prototype.slice.call(tables[i].querySelectorAll("tr"));
+    for(var r=0;r<rows.length;r++){
+      var candidate=Array.prototype.slice.call(rows[r].querySelectorAll("td,th")).map(clean);
+      var lower=candidate.map(function(v){return v.toLowerCase();});
+      if(lower.indexOf("surname")!==-1 && lower.indexOf("preferred name")!==-1){
+        table=tables[i];
+        headerRow=rows[r];
+        headers=candidate;
+        break;
       }
     }
-    return null;
   }
-  function parseHtml(html){
-    var doc=new DOMParser().parseFromString(html,'text/html');
-    var table=findStudentTable(doc);
-    if(!table) throw new Error('Could not find an iSAMS Set List table.');
-    var rows=Array.prototype.slice.call(table.querySelectorAll('tr'));
-    var headerRow=null, headers=[];
-    for(var i=0;i<rows.length;i++){
-      var h=Array.prototype.slice.call(rows[i].querySelectorAll('td,th')).map(text);
-      var hk=h.map(headerKey);
-      if(hk.indexOf('surname')!==-1 && hk.indexOf('preferred name')!==-1){headerRow=rows[i];headers=h;break;}
-    }
-    var students=[];
-    if(headerRow){
-      var start=rows.indexOf(headerRow)+1;
-      for(var j=start;j<rows.length;j++){
-        var cells=Array.prototype.slice.call(rows[j].querySelectorAll(':scope > td, :scope > th')).map(text);
-        if(!cells.length) continue;
-        var record={}; headers.forEach(function(h,k){record[h]=cells[k]||'';});
-        var sn=record[headers[headerKey(headers).indexOf('surname')]];
-        var pn=record[headers[headerKey(headers).indexOf('preferred name')]];
-        if(sn||pn) students.push({name:[pn,sn].filter(Boolean).join(' '),fields:record});
-      }
-    }
-    var meta={};
-    Array.prototype.slice.call(doc.querySelectorAll('td')).forEach(function(td){
-      var label=text(td).replace(/:$/,'').toLowerCase();
-      if(['teacher','grade group','subject','set name','set code'].indexOf(label)>=0 && td.nextElementSibling) meta[label]=text(td.nextElementSibling);
-    });
-    return {doc:doc,headers:headers,students:students,meta:meta};
+
+  if(!table || !headerRow) throw new Error("Could not find the iSAMS student table.");
+
+  var rows=Array.prototype.slice.call(table.querySelectorAll("tr"));
+  var students=[];
+  var headerLower=headers.map(function(v){return v.toLowerCase();});
+  var surnameIndex=headerLower.indexOf("surname");
+  var preferredIndex=headerLower.indexOf("preferred name");
+
+  for(var j=rows.indexOf(headerRow)+1;j<rows.length;j++){
+    var cells=Array.prototype.slice.call(rows[j].querySelectorAll(":scope > td, :scope > th")).map(clean);
+    if(!cells.length) continue;
+    var record={};
+    for(var c=0;c<headers.length;c++) record[headers[c]]=cells[c] || "";
+    var surname=record[headers[surnameIndex]] || "";
+    var preferred=record[headers[preferredIndex]] || "";
+    if(!surname && !preferred) continue;
+    students.push({name:[preferred,surname].filter(Boolean).join(" "),fields:record});
   }
-  document.getElementById('test').addEventListener('click',function(){
+
+  var meta={};
+  Array.prototype.slice.call(doc.querySelectorAll("td")).forEach(function(td){
+    var key=clean(td.textContent).replace(/:$/g,"").toLowerCase();
+    if(["teacher","grade group","subject","set name","set code"].indexOf(key)!==-1 && td.nextElementSibling){
+      meta[key]=clean(td.nextElementSibling.textContent);
+    }
+  });
+
+  return {headers:headers,students:students,meta:meta};
+}
+
+function render(parsed, fileName){
+  resultBox.className="card";
+  var heading=document.createElement("h2");
+  heading.textContent="Parsed: "+fileName;
+  resultBox.replaceChildren(heading);
+
+  var summary=document.createElement("p");
+  summary.textContent=(parsed.meta["set name"] || "Set not detected")+" - "+parsed.students.length+" students";
+  resultBox.appendChild(summary);
+
+  var fieldTitle=document.createElement("strong");
+  fieldTitle.textContent="Detected fields";
+  resultBox.appendChild(fieldTitle);
+  var fields=document.createElement("div"); fields.className="fields";
+  parsed.headers.forEach(function(h){var span=document.createElement("span");span.className="field";span.textContent=h;fields.appendChild(span);});
+  resultBox.appendChild(fields);
+
+  var table=document.createElement("table");
+  var thead=document.createElement("thead");
+  var tr=document.createElement("tr");
+  ["Name"].concat(parsed.headers).forEach(function(h){var th=document.createElement("th");th.textContent=h;tr.appendChild(th);});
+  thead.appendChild(tr); table.appendChild(thead);
+  var tbody=document.createElement("tbody");
+  parsed.students.forEach(function(student){
+    var row=document.createElement("tr");
+    var nameCell=document.createElement("td"); nameCell.textContent=student.name; row.appendChild(nameCell);
+    parsed.headers.forEach(function(h){var td=document.createElement("td");td.textContent=student.fields[h];row.appendChild(td);});
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody); resultBox.appendChild(table);
+}
+
+document.getElementById("selfTest").addEventListener("click",function(){
+  try{
+    var fake="<!doctype html><html><body><table><tr><td>Surname</td><td>Preferred Name</td><td>Form</td></tr><tr><td>One</td><td>Alex</td><td>8A</td></tr><tr><td>Two</td><td>Sam</td><td>8B</td></tr></table></body></html>";
+    var parsed=parseHtmlReport(fake);
+    if(parsed.students.length!==2) throw new Error("Expected 2 students, found "+parsed.students.length);
+    if(parsed.headers.length!==3) throw new Error("Expected 3 fields, found "+parsed.headers.length);
+    setStatus("Self-test passed - HTML parsing is working.",true);
+  }catch(error){
+    console.error(error);
+    setStatus("Self-test failed: "+error.message,false);
+  }
+});
+
+fileInput.addEventListener("change",function(){
+  var file=fileInput.files && fileInput.files[0];
+  if(!file) return;
+  setStatus("Reading "+file.name+"...");
+  var reader=new FileReader();
+  reader.onload=function(){
     try{
-      var fake='<!doctype html><html><body><table><tr><td>Surname</td><td>Preferred Name</td><td>Form</td></tr><tr><td>Test One</td><td>Alex</td><td>8A</td></tr><tr><td>Test Two</td><td>Sam</td><td>8B</td></tr></table></body></html>';
-      var parsed=parseHtml(fake);
-      if(parsed.students.length!==2) throw new Error('Expected 2 students, found '+parsed.students.length);
-      setStatus('Self-test passed — JavaScript and basic HTML parsing are working.','ok');
-    }catch(e){setStatus('Self-test failed: '+e.message,'bad');console.error(e);}
-  });
-  fileInput.addEventListener('change',function(){
-    var file=fileInput.files && fileInput.files[0];
-    if(!file) return;
-    setStatus('Reading '+file.name+'…');
-    file.text().then(function(raw){
-      try{
-        var isMhtml=/\.(mht|mhtml)$/i.test(file.name) || /Content-Type:\s*multipart\/related/i.test(raw);
-        var html=raw;
-        if(isMhtml){
-          // Stage 1 browser smoke test: identify MHTML and locate the HTML MIME part.
-          var boundaryMatch=raw.match(/boundary\s*=\s*(?:"([^"]+)"|([^;\r\n]+))/i);
-          if(!boundaryMatch) throw new Error('MHTML detected, but no MIME boundary was found.');
-          var boundary=boundaryMatch[1]||boundaryMatch[2].trim();
-          var parts=raw.split('--'+boundary);
-          var htmlFound=null;
-          for(var p=0;p<parts.length;p++) if(/^\s*Content-Type:\s*text\/html/i.test(parts[p])){var sep=parts[p].search(/\r?\n\r?\n/);if(sep>=0) htmlFound=parts[p].slice(sep).replace(/^\r?\n\r?\n/,'');break;}
-          if(!htmlFound) throw new Error('No text/html part found in MHTML.');
-          html=htmlFound;
-        }
-        var parsed=parseHtml(html);
-        result.className='box';
-        result.innerHTML='<h2>Import result</h2><p><strong>'+parsed.students.length+'</strong> students found.</p><p><strong>'+parsed.headers.length+'</strong> fields detected: '+parsed.headers.map(function(x){return '<code>'+x.replace(/[&<>]/g,'')+'</code>';}).join(', ')+'</p><p>Report: '+(parsed.meta['set name']||'not detected')+'</p><table><thead><tr><th>Name</th>'+parsed.headers.map(function(h){return '<th>'+h.replace(/[&<>]/g,'')+'</th>';}).join('')+'</tr></thead><tbody>'+parsed.students.map(function(s){return '<tr><td>'+s.name.replace(/[&<>]/g,'')+'</td>'+parsed.headers.map(function(h){return '<td>'+String(s.fields[h]||'').replace(/[&<>]/g,'')+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table>';
-        setStatus('Import parsed successfully.','ok');
-      }catch(e){setStatus('Import failed: '+e.message,'bad');console.error(e);}
-    }).catch(function(e){setStatus('Could not read the file: '+e.message,'bad');});
-  });
-})();
-</script></body></html>
+      var raw=String(reader.result || "");
+      var parsed=parseHtmlReport(raw);
+      render(parsed,file.name);
+      setStatus("Import successful - "+parsed.students.length+" students found.",true);
+    }catch(error){
+      console.error(error);
+      setStatus("Import failed: "+error.message,false);
+    }
+  };
+  reader.onerror=function(){setStatus("The browser could not read that file.",false);};
+  reader.readAsText(file);
+});
+</script>
+</body>
+</html>
