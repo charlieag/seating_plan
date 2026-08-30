@@ -1,83 +1,147 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Seating Plan - Stage 1 Import Test</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seating Plan - Stage 1</title>
 <style>
-body{font-family:Arial,sans-serif;margin:0;background:#f5f7fa;color:#18202a}main{max-width:900px;margin:auto;padding:32px 20px}.card{background:#fff;border:1px solid #d9dee7;border-radius:12px;padding:24px;margin-bottom:16px}button,label{font:inherit;padding:11px 16px;border:1px solid #bcc5d1;border-radius:8px;background:#fff;cursor:pointer;display:inline-block}label{background:#285bd6;color:#fff;border-color:#285bd6}input[type=file]{position:absolute;left:-9999px;width:1px;height:1px}.status{margin-top:16px;padding:12px;border-radius:8px;background:#eef1f5}.ok{background:#e9f7ee;color:#17683a}.bad{background:#fff0f0;color:#9e2929}.hidden{display:none}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{text-align:left;padding:8px;border-bottom:1px solid #ddd;vertical-align:top}.small{color:#697584;font-size:14px}.fields{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.field{background:#f0f2f5;border:1px solid #d9dee7;border-radius:999px;padding:4px 8px;font-size:13px}
+body{font-family:Arial,sans-serif;margin:0;background:#f4f6f8;color:#18202a}main{max-width:960px;margin:auto;padding:32px 20px}section{background:#fff;border:1px solid #d8dee6;border-radius:12px;padding:22px;margin-bottom:16px}button,label{font:inherit;padding:11px 16px;border-radius:8px;border:1px solid #bcc5d1;background:#fff;cursor:pointer;display:inline-block}label{background:#285bd6;color:#fff;border-color:#285bd6}input[type=file]{position:absolute;left:-9999px}.status{padding:12px;margin-top:14px;border-radius:8px;background:#eef1f5}.ok{background:#e9f7ee;color:#17683a}.bad{background:#fff0f0;color:#9e2929}.hidden{display:none}table{width:100%;border-collapse:collapse;margin-top:14px}th,td{text-align:left;padding:8px;border-bottom:1px solid #dde2e8}.fields{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.field{padding:4px 8px;border-radius:999px;background:#f0f2f5;border:1px solid #d8dee6;font-size:13px}.version{font-size:12px;color:#687381}
 </style>
 </head>
 <body>
 <main>
-<div class="card">
+<section>
 <h1>iSAMS Seating Planner</h1>
-<p>Stage 1: prove the browser can read an iSAMS report locally.</p>
+<p>Stage 1: local HTML import test.</p>
+<p class="version">Build 0.1.6</p>
 <p><strong>JavaScript:</strong> <span id="jsStatus">loading...</span></p>
 <button id="selfTest" type="button">Run self-test</button>
-</div>
-<div class="card">
-<h2>Import report</h2>
-<p class="small">Choose an iSAMS HTML, MHT or MHTML file. The file is read only in this browser.</p>
-<label for="fileInput">Choose iSAMS file</label>
-<input id="fileInput" type="file" accept=".html,.htm,.mht,.mhtml">
-<div id="status" class="status">No file selected.</div>
-</div>
-<div id="result" class="card hidden"></div>
+<div id="status" class="status">Ready.</div>
+</section>
+
+<section>
+<h2>Import iSAMS HTML</h2>
+<p>Choose the anonymised HTML export. MHTML and photos come next.</p>
+<label for="fileInput">Choose file</label>
+<input id="fileInput" type="file" accept=".html,.htm">
+</section>
+
+<section id="result" class="hidden"></section>
 </main>
 <script>
+(function(){
 "use strict";
+
 var jsStatus=document.getElementById("jsStatus");
 var statusBox=document.getElementById("status");
-var resultBox=document.getElementById("result");
 var fileInput=document.getElementById("fileInput");
+var result=document.getElementById("result");
 jsStatus.textContent="loaded";
-function clean(value){return String(value||"").replace(/\s+/g," ").replace(/\u00a0/g," ").trim();}
-function cellText(el){return clean(el && el.textContent);}
-function setStatus(message,ok){statusBox.textContent=message;statusBox.className="status"+(ok===true?" ok":ok===false?" bad":"");}
-function parseHtmlReport(raw){
-  var doc=new DOMParser().parseFromString(raw,"text/html");
-  var tables=Array.prototype.slice.call(doc.querySelectorAll("table"));
-  var table=null,headerRow=null,headers=[];
-  for(var i=0;i<tables.length && !table;i++){
-    var rows=Array.prototype.slice.call(tables[i].querySelectorAll("tr"));
+
+function cleanText(node){
+  if(node===null||node===undefined)return "";
+  var value=(typeof node === "string") ? node : (node.textContent || "");
+  return value.replace(/\u00a0/g," ").replace(/\s+/g," ").trim();
+}
+
+function normalise(value){return cleanText(value).toLowerCase().replace(/:/g,"");}
+
+function setStatus(message,kind){statusBox.textContent=message;statusBox.className="status"+(kind?" "+kind:"");}
+
+function findStudentTable(doc){
+  var tables=doc.getElementsByTagName("table");
+  for(var i=0;i<tables.length;i++){
+    var rows=tables[i].getElementsByTagName("tr");
     for(var r=0;r<rows.length;r++){
-      var cells=Array.prototype.slice.call(rows[r].querySelectorAll("td,th"));
-      var candidate=cells.map(cellText);
-      var lower=candidate.map(function(v){return v.toLowerCase();});
-      if(lower.indexOf("surname")!==-1 && lower.indexOf("preferred name")!==-1){table=tables[i];headerRow=rows[r];headers=candidate;break;}
+      var cells=rows[r].querySelectorAll("td,th");
+      var foundSurname=false,foundPreferred=false;
+      for(var c=0;c<cells.length;c++){
+        var value=normalise(cells[c]);
+        if(value==="surname")foundSurname=true;
+        if(value==="preferred name")foundPreferred=true;
+      }
+      if(foundSurname&&foundPreferred)return tables[i];
     }
   }
-  if(!table||!headerRow)throw new Error("Could not find the iSAMS student table.");
-  var rows=Array.prototype.slice.call(table.querySelectorAll("tr"));
+  return null;
+}
+
+function parseReport(raw){
+  var doc=new DOMParser().parseFromString(raw,"text/html");
+  var table=findStudentTable(doc);
+  if(!table)throw new Error("Could not find the iSAMS student table. No row contained both Surname and Preferred Name.");
+
+  var rows=table.getElementsByTagName("tr");
+  var headerRow=null,headers=[];
+  for(var i=0;i<rows.length;i++){
+    var cells=rows[i].querySelectorAll("td,th");
+    var temp=[];
+    for(var c=0;c<cells.length;c++)temp.push(cleanText(cells[c]));
+    var lower=temp.map(normalise);
+    if(lower.indexOf("surname")!==-1&&lower.indexOf("preferred name")!==-1){headerRow=rows[i];headers=temp;break;}
+  }
+  if(!headerRow)throw new Error("Student table found, but its header row could not be identified.");
+
+  var lowerHeaders=headers.map(normalise);
+  var surnameIndex=lowerHeaders.indexOf("surname");
+  var preferredIndex=lowerHeaders.indexOf("preferred name");
+  var start=Array.prototype.indexOf.call(rows,headerRow)+1;
   var students=[];
-  var headerLower=headers.map(function(v){return v.toLowerCase();});
-  var surnameIndex=headerLower.indexOf("surname");
-  var preferredIndex=headerLower.indexOf("preferred name");
-  for(var j=rows.indexOf(headerRow)+1;j<rows.length;j++){
-    var rowCells=Array.prototype.slice.call(rows[j].children).filter(function(el){return el.tagName==='TD'||el.tagName==='TH';});
-    var values=rowCells.map(cellText);if(!values.length)continue;
-    var record={};for(var c=0;c<headers.length;c++)record[headers[c]]=values[c]||"";
-    var surname=record[headers[surnameIndex]]||"";var preferred=record[headers[preferredIndex]]||"";
+  for(var r=start;r<rows.length;r++){
+    var cells=rows[r].querySelectorAll("td,th");
+    var values=[];
+    for(var x=0;x<cells.length;x++)values.push(cleanText(cells[x]));
+    if(values.length===0)continue;
+    var record={};
+    for(var h=0;h<headers.length;h++)record[headers[h]]=values[h]||"";
+    var surname=values[surnameIndex]||"";
+    var preferred=values[preferredIndex]||"";
     if(surname||preferred)students.push({name:[preferred,surname].filter(Boolean).join(" "),fields:record});
   }
   var meta={};
-  Array.prototype.slice.call(doc.querySelectorAll("td")).forEach(function(td){
-    var key=cellText(td).replace(/:$/g,"").toLowerCase();
-    if(["teacher","grade group","subject","set name","set code"].indexOf(key)!==-1&&td.nextElementSibling)meta[key]=cellText(td.nextElementSibling);
-  });
-  return{headers:headers,students:students,meta:meta};
+  var allCells=doc.getElementsByTagName("td");
+  for(var m=0;m<allCells.length;m++){
+    var key=normalise(allCells[m]);
+    if(["teacher","grade group","subject","set name","set code"].indexOf(key)!==-1&&allCells[m].nextElementSibling){meta[key]=cleanText(allCells[m].nextElementSibling);}
+  }
+  return {headers:headers,students:students,meta:meta};
 }
+
 function render(parsed,fileName){
-  resultBox.className="card";resultBox.innerHTML="";
-  var h=document.createElement("h2");h.textContent="Parsed: "+fileName;resultBox.appendChild(h);
-  var p=document.createElement("p");p.textContent=(parsed.meta["set name"]||"Set not detected")+" - "+parsed.students.length+" students";resultBox.appendChild(p);
-  var strong=document.createElement("strong");strong.textContent="Detected fields";resultBox.appendChild(strong);
-  var fields=document.createElement("div");fields.className="fields";parsed.headers.forEach(function(x){var s=document.createElement("span");s.className="field";s.textContent=x;fields.appendChild(s)});resultBox.appendChild(fields);
-  var table=document.createElement("table"),thead=document.createElement("thead"),tr=document.createElement("tr");
-  ["Name"].concat(parsed.headers).forEach(function(h){var th=document.createElement("th");th.textContent=h;tr.appendChild(th)});thead.appendChild(tr);table.appendChild(thead);
-  var tbody=document.createElement("tbody");parsed.students.forEach(function(st){var row=document.createElement("tr");var nc=document.createElement("td");nc.textContent=st.name;row.appendChild(nc);parsed.headers.forEach(function(h){var td=document.createElement("td");td.textContent=st.fields[h]||"";row.appendChild(td)});tbody.appendChild(row)});table.appendChild(tbody);resultBox.appendChild(table);
+  result.className="";result.innerHTML="";
+  var h=document.createElement("h2");h.textContent="Parsed: "+fileName;result.appendChild(h);
+  var p=document.createElement("p");p.textContent=(parsed.meta["set name"]||"Set not detected")+" - "+parsed.students.length+" students found.";result.appendChild(p);
+  var strong=document.createElement("strong");strong.textContent="Detected fields";result.appendChild(strong);
+  var fields=document.createElement("div");fields.className="fields";
+  parsed.headers.forEach(function(header){var span=document.createElement("span");span.className="field";span.textContent=header;fields.appendChild(span);});
+  result.appendChild(fields);
+  var table=document.createElement("table");
+  var thead=document.createElement("thead"),tr=document.createElement("tr");
+  ["Name"].concat(parsed.headers).forEach(function(header){var th=document.createElement("th");th.textContent=header;tr.appendChild(th);});
+  thead.appendChild(tr);table.appendChild(thead);
+  var tbody=document.createElement("tbody");
+  parsed.students.forEach(function(student){var row=document.createElement("tr");var name=document.createElement("td");name.textContent=student.name;row.appendChild(name);parsed.headers.forEach(function(header){var td=document.createElement("td");td.textContent=student.fields[header]||"";row.appendChild(td);});tbody.appendChild(row);});
+  table.appendChild(tbody);result.appendChild(table);
 }
-document.getElementById("selfTest").addEventListener("click",function(){try{var fake='<!doctype html><html><body><table><tr><td>Surname</td><td>Preferred Name</td><td>Form</td></tr><tr><td>One</td><td>Alex</td><td>8A</td></tr><tr><td>Two</td><td>Sam</td><td>8B</td></tr></table></body></html>';var p=parseHtmlReport(fake);if(p.students.length!==2)throw new Error("Expected 2 students, found "+p.students.length);setStatus("Self-test passed - HTML parsing is working.",true)}catch(e){console.error(e);setStatus("Self-test failed: "+e.message,false)}});
-fileInput.addEventListener("change",function(){var file=fileInput.files&&fileInput.files[0];if(!file)return;setStatus("Reading "+file.name+"...");var reader=new FileReader();reader.onload=function(){try{var raw=String(reader.result||"");if(/\.(mht|mhtml)$/i.test(file.name)||/Content-Type:\s*multipart\/related/i.test(raw)){throw new Error("MHTML support is not enabled in this test yet. Please use the HTML export first.")}var p=parseHtmlReport(raw);render(p,file.name);setStatus("Import successful - "+p.students.length+" students found.",true)}catch(e){console.error(e);setStatus("Import failed: "+e.message,false)}};reader.onerror=function(){setStatus("The browser could not read that file.",false)};reader.readAsText(file)});
+
+document.getElementById("selfTest").addEventListener("click",function(){
+  try{
+    var fake="<html><body><table><tr><td>Surname</td><td>Preferred Name</td><td>Form</td></tr><tr><td>One</td><td>Alex</td><td>8A</td></tr><tr><td>Two</td><td>Sam</td><td>8B</td></tr></table></body></html>";
+    var parsed=parseReport(fake);
+    if(parsed.students.length!==2)throw new Error("Expected 2 students but found "+parsed.students.length+".");
+    setStatus("Self-test passed. JavaScript and HTML parsing are working.","ok");
+  }catch(error){console.error(error);setStatus("Self-test failed: "+error.message,"bad");}
+});
+
+fileInput.addEventListener("change",function(){
+  var file=fileInput.files&&fileInput.files[0];if(!file)return;
+  setStatus("Reading "+file.name+"...");
+  var reader=new FileReader();
+  reader.onload=function(){try{var parsed=parseReport(String(reader.result||""));render(parsed,file.name);setStatus("Import successful - "+parsed.students.length+" students found.","ok");}catch(error){console.error(error);setStatus("Import failed: "+error.message,"bad");}};
+  reader.onerror=function(){setStatus("The browser could not read that file.","bad");};
+  reader.readAsText(file);
+});
+})();
 </script>
-</body></html>
+</body>
+</html>
