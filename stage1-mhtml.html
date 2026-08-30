@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>iSAMS Seating Planner - MHTML Test</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;background:#f5f7fa;color:#18202a}main{max-width:980px;margin:auto;padding:32px 20px}.card{background:#fff;border:1px solid #d8dee6;border-radius:12px;padding:22px;margin-bottom:16px}button,label{font:inherit;padding:11px 16px;border-radius:8px;border:1px solid #bcc5d1;background:#fff;cursor:pointer;display:inline-block}label{background:#285bd6;color:#fff;border-color:#285bd6}input[type=file]{position:absolute;left:-9999px}.status{padding:12px;margin-top:14px;border-radius:8px;background:#eef1f5}.ok{background:#eaf7ef;color:#17683a}.bad{background:#fff0f0;color:#9e2929}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.meta{border:1px solid #dde2e8;border-radius:10px;padding:12px}.meta small{display:block;color:#687381;margin-bottom:4px}.fields{display:flex;flex-wrap:wrap;gap:6px}.field{padding:4px 8px;border-radius:999px;background:#f0f2f5;border:1px solid #d8dee6;font-size:13px}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;margin-top:14px}th,td{text-align:left;padding:8px;border-bottom:1px solid #dde2e8;vertical-align:top}img.student{width:60px;height:75px;object-fit:cover;border-radius:6px;border:1px solid #d8dee6;background:#eef1f4}
+</style>
+</head>
+<body>
+<main>
+<div class="card">
+<h1>iSAMS Seating Planner</h1>
+<p><strong>Stage 1B — MHTML import</strong></p>
+<p>This page reads an MHTML file locally. No data is uploaded.</p>
+<p>Build 0.3.0</p>
+<label for="file">Choose MHTML</label>
+<input id="file" type="file" accept=".mht,.mhtml">
+<div id="status" class="status">Ready.</div>
+</div>
+<div id="result" class="card" hidden></div>
+</main>
+<script>
+'use strict';
+const fileInput=document.getElementById('file');
+const statusBox=document.getElementById('status');
+const result=document.getElementById('result');
+function status(message,kind){statusBox.textContent=message;statusBox.className='status'+(kind?' '+kind:'');}
+function clean(s){return String(s??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();}
+function unquotePrintable(s){return s.replace(/=\r?\n/g,'').replace(/=([0-9A-Fa-f]{2})/g,(_,h)=>String.fromCharCode(parseInt(h,16)));}
+function decodeBase64(s){const compact=s.replace(/[\r\n\t ]/g,'');const bin=atob(compact);const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return bytes;}
+function parseHeaders(block){const lines=block.replace(/\r\n/g,'\n').split('\n');const out={};let current='';for(const line of lines){if(/^[ \t]/.test(line)&&current){out[current]+=' '+line.trim();continue;}const m=line.match(/^([^:]+):\s*(.*)$/);if(m){current=m[1].toLowerCase();out[current]=m[2].trim();}}return out;}
+function parseMhtml(raw){
+ const headEnd=raw.search(/\r?\n\r?\n/);if(headEnd<0)throw new Error('Invalid MHTML: MIME headers not found.');
+ const topHeaders=parseHeaders(raw.slice(0,headEnd));
+ let boundaryValue=topHeaders['content-type']?.match(/boundary\s*=\s*(?:"([^"]+)"|([^;]+))/i);
+ if(!boundaryValue)throw new Error('Invalid MHTML: MIME boundary not found.');
+ const boundary=(boundaryValue[1]||boundaryValue[2]).trim();
+ const chunks=raw.split('--'+boundary);const parts=[];
+ for(let chunk of chunks){chunk=chunk.replace(/^\r?\n/,'');if(!chunk.trim()||chunk.trim()==='--')continue;const sep=chunk.search(/\r?\n\r?\n/);if(sep<0)continue;const headers=parseHeaders(chunk.slice(0,sep));let body=chunk.slice(sep).replace(/^\r?\n\r?\n/,'').replace(/\r?\n--$/,'');const encoding=(headers['content-transfer-encoding']||'').toLowerCase();if(encoding==='quoted-printable')body=unquotePrintable(body);parts.push({headers,body});}
+ const htmlPart=parts.find(p=>(p.headers['content-type']||'').toLowerCase().split(';')[0].trim()==='text/html');
+ if(!htmlPart)throw new Error('MHTML parsed, but no text/html part was found.');
+ const images=[];
+ for(const p of parts){const type=(p.headers['content-type']||'').toLowerCase().split(';')[0].trim();if(!type.startsWith('image/'))continue;let bytes;const enc=(p.headers['content-transfer-encoding']||'').toLowerCase();if(enc==='base64')bytes=decodeBase64(p.body);else throw new Error('Unsupported image encoding: '+enc);images.push({type,location:p.headers['content-location']||'',bytes});}
+ return {html:htmlPart.body,images,parts};
+}
+function findSetTable(doc){
+ for(const table of doc.querySelectorAll('table')){
+   const rows=[...table.querySelectorAll(':scope > tbody > tr, :scope > tr, :scope > thead > tr')];
+   for(const row of rows){const direct=[...row.children].filter(c=>c.tagName==='TD'||c.tagName==='TH').map(c=>clean(c.textContent));const lower=direct.map(x=>x.toLowerCase());if(lower.includes('surname')&&lower.includes('preferred name'))return {table,row,headers:direct};}
+ }
+ return null;
+}
+function parseHtml(html){
+ const doc=new DOMParser().parseFromString(html,'text/html');const found=findSetTable(doc);if(!found)throw new Error('Could not find the iSAMS student table.');
+ const rows=[...found.table.querySelectorAll(':scope > tbody > tr, :scope > tr, :scope > thead > tr')];const headerIndex=rows.indexOf(found.row);const lower=found.headers.map(x=>x.toLowerCase());const surnameIndex=lower.indexOf('surname');const preferredIndex=lower.indexOf('preferred name');const students=[];
+ for(const row of rows.slice(headerIndex+1)){const cells=[...row.children].filter(c=>c.tagName==='TD'||c.tagName==='TH');const values=cells.map(c=>clean(c.textContent));if(!values.length)continue;const fields={};found.headers.forEach((h,i)=>fields[h]=values[i]||'');if(values[surnameIndex]||values[preferredIndex])students.push({name:[values[preferredIndex],values[surnameIndex]].filter(Boolean).join(' '),fields});}
+ const meta={};for(const td of doc.querySelectorAll('td')){const key=clean(td.textContent).replace(/:$/,'').toLowerCase();if(['teacher','grade group','subject','set name','set code'].includes(key)&&td.nextElementSibling)meta[key]=clean(td.nextElementSibling.textContent);}
+ return {headers:found.headers,students,meta};
+}
+function matchPhotos(parsed,mhtml){
+ const byFile=new Map(mhtml.images.map(img=>[img.location.split('/').pop().split('?')[0],img]));
+ const imgs=[...new DOMParser().parseFromString(mhtml.html,'text/html').querySelectorAll('img')];
+ const gallery=[];
+ for(const img of imgs){const href=img.closest('a')?.getAttribute('href')||img.getAttribute('src')||'';const file=href.split('/').pop().split('?')[0];if(!/\.(jpe?g|png|gif)$/i.test(file))continue;const cell=img.closest('td');if(!cell)continue;const lines=clean(cell.textContent).split(' ');gallery.push({file,name:clean(cell.textContent),embedded:byFile.get(file)||null});}
+ let matched=0;for(const student of parsed.students){const surname=student.fields[parsed.headers.find(h=>h.toLowerCase()==='surname')]||'';const preferred=student.fields[parsed.headers.find(h=>h.toLowerCase()==='preferred name')]||'';const target=clean((preferred+' '+surname)).toLowerCase();const g=gallery.find(x=>clean(x.name).toLowerCase().includes(target));if(g?.embedded){student.image=g.embedded;matched++;}}
+ return {gallery,matched};
+}
+function imageUrl(image){let binary='';for(let i=0;i<image.bytes.length;i+=8192)binary+=String.fromCharCode(...image.bytes.subarray(i,i+8192));return 'data:'+image.type+';base64,'+btoa(binary);}
+fileInput.addEventListener('change',async()=>{
+ const file=fileInput.files?.[0];if(!file)return;status('Reading '+file.name+'...');
+ try{const raw=await file.text();const m=parseMhtml(raw);const parsed=parseHtml(m.html);const photos=matchPhotos(parsed,m);result.hidden=false;result.innerHTML='';const h=document.createElement('h2');h.textContent=parsed.meta['set name']||'Imported set';result.appendChild(h);const p=document.createElement('p');p.textContent=parsed.students.length+' students found · '+photos.matched+' photos matched · '+m.images.length+' embedded images';result.appendChild(p);const fields=document.createElement('div');fields.className='fields';parsed.headers.forEach(x=>{const s=document.createElement('span');s.className='field';s.textContent=x;fields.appendChild(s)});result.appendChild(fields);const table=document.createElement('table');const head=document.createElement('thead');const hr=document.createElement('tr');['Photo','Name'].concat(parsed.headers).forEach(x=>{const th=document.createElement('th');th.textContent=x;hr.appendChild(th)});head.appendChild(hr);table.appendChild(head);const body=document.createElement('tbody');parsed.students.forEach(student=>{const tr=document.createElement('tr');const td=document.createElement('td');if(student.image){const img=document.createElement('img');img.className='student';img.src=imageUrl(student.image);td.appendChild(img);}else td.textContent='—';tr.appendChild(td);const n=document.createElement('td');n.textContent=student.name;tr.appendChild(n);parsed.headers.forEach(x=>{const c=document.createElement('td');c.textContent=student.fields[x]||'';tr.appendChild(c)});body.appendChild(tr)});table.appendChild(body);result.appendChild(table);status('MHTML import successful.',true);}catch(e){console.error(e);status('Import failed: '+e.message,false);}
+});
+</script>
+</body>
+</html>
