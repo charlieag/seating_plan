@@ -1,29 +1,87 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Seating Plan — iSAMS Import Test</title>
-<style>body{margin:0;background:#f5f7fa;color:#18202a;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:1100px;margin:auto;padding:32px 20px}h1{margin:0 0 8px}.lede{color:#657181}.panel{background:#fff;border:1px solid #d9dee7;border-radius:14px;padding:20px;margin:16px 0}.drop{border:2px dashed #b9c2ce;border-radius:12px;padding:28px;text-align:center}.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border:1px solid #ccd3dd;border-radius:9px;background:#fff;font:inherit;cursor:pointer}.primary{background:#285bd6;color:#fff}.actions{display:flex;gap:8px;justify-content:center;margin:14px 0}.status{margin-top:12px;padding:11px;border-radius:9px;background:#f0f2f5}.ok{background:#ecf8f0;color:#17683a}.warn{background:#fff7e7;color:#835800}.bad{background:#fff0f0;color:#9e2929}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}.meta{border:1px solid #dde2e9;border-radius:10px;padding:12px}.meta small{display:block;color:#697584;margin-bottom:4px}.chips{display:flex;flex-wrap:wrap;gap:7px}.chip{border:1px solid #d9dee7;border-radius:999px;padding:5px 9px;font-size:13px}.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:700px}th,td{padding:9px 10px;border-bottom:1px solid #e2e6ec;text-align:left;vertical-align:top}th{background:#f7f8fa}.photo{width:52px;height:64px;object-fit:cover;border:1px solid #d9dee7;border-radius:7px}.hidden{display:none}.diag{white-space:pre-wrap;background:#10151c;color:#e5edf7;padding:14px;border-radius:10px;font:12px ui-monospace,monospace}</style></head>
-<body><main><h1>iSAMS Import Test</h1><p class="lede">Stage 1: locally parse an iSAMS HTML/MHTML report. No data is uploaded.</p>
-<section class="panel"><h2>Import</h2><div id="drop" class="drop"><strong>Choose an iSAMS report</strong><div class="lede">HTML, MHT or MHTML</div><div class="actions"><label class="btn primary" for="file">Choose file</label><button class="btn" id="selfTest" type="button">Run self-test</button></div><input id="file" type="file" accept=".html,.htm,.mht,.mhtml,text/html,application/x-mimearchive"><div id="status" class="status">No file loaded.</div></div></section>
-<section id="summary" class="panel hidden"><h2>Report</h2><div id="meta" class="grid"></div></section><section id="fieldPanel" class="panel hidden"><h2>Detected fields</h2><div id="fields" class="chips"></div></section><section id="studentPanel" class="panel hidden"><h2>Students</h2><div id="studentSummary" class="lede"></div><div class="tablewrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div></section><section id="diagPanel" class="panel hidden"><h2>Diagnostics</h2><div id="diag" class="diag"></div></section>
-</main><script>
-(function(){'use strict';
-var $=function(id){return document.getElementById(id)};
-var clean=function(v){return String(v==null?'':v).replace(/\s+/g,' ').replace(/\u00a0/g,' ').trim()};
-var key=function(v){return clean(v).toLowerCase().replace(/:/g,'')};
-var esc=function(v){return String(v==null?'':v).replace(/[&<>\'"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;',"\"":'&quot;'}[c]})};
-function status(t,k){$('status').textContent=t;$('status').className='status '+(k||'')}
-function docFrom(s){return new DOMParser().parseFromString(s,'text/html')}
-function getMeta(d){var out={title:clean(d.title)};Array.from(d.querySelectorAll('td')).forEach(function(c){var l=clean(c.textContent).toLowerCase();var n=c.nextElementSibling;if(!n)return;if(l==='teacher:')out.teacher=clean(n.textContent);if(l==='grade group:')out.grade=clean(n.textContent);if(l==='subject:')out.subject=clean(n.textContent);if(l==='set name:')out.setName=clean(n.textContent);if(l==='set code:')out.setCode=clean(n.textContent)});var h=Array.from(d.querySelectorAll('b,strong,h1,h2,h3,h4')).map(function(x){return clean(x.textContent)}).find(function(x){return /^set profile/i.test(x)});if(h)out.title=h;return out}
-function getStudents(d){var tables=Array.from(d.querySelectorAll('table'));var table=tables.find(function(t){var h=Array.from(t.querySelectorAll('tr:first-child td,tr:first-child th')).map(function(x){return key(x.textContent)});return h.indexOf('surname')>=0&&h.indexOf('preferred name')>=0});if(!table)throw Error('Could not find the Set List table with Surname and Preferred Name.');var rows=Array.from(table.querySelectorAll('tr'));var hi=rows.findIndex(function(r){var h=Array.from(r.children).map(function(x){return key(x.textContent)});return h.indexOf('surname')>=0&&h.indexOf('preferred name')>=0});var headers=Array.from(rows[hi].children).map(function(x){return clean(x.textContent)});var sH=headers.find(function(h){return key(h)==='surname'}),pH=headers.find(function(h){return key(h)==='preferred name'});var list=[];rows.slice(hi+1).forEach(function(r){var vals=Array.from(r.children).map(function(x){return clean(x.textContent)});if(!vals.length)return;var rec={};headers.forEach(function(h,i){rec[h]=vals[i]||''});if(!rec[sH]&&!rec[pH])return;list.push({fields:rec,name:[rec[pH],rec[sH]].filter(Boolean).join(' '),photo:null})});return{headers:headers,students:list}}
-function b64(v){var b=atob(v.replace(/\s/g,'')),a=new Uint8Array(b.length);for(var i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a}
-function mhtmlParts(raw){var he=raw.search(/\r?\n\r?\n/);if(he<0)throw Error('Invalid MHTML: no MIME header.');var head=raw.slice(0,he),m=head.match(/boundary\s*=\s*(?:"([^"]+)"|([^;\r\n]+))/i);if(!m)throw Error('Invalid MHTML: boundary not found.');var boundary=m[1]||m[2].trim();return raw.split('--'+boundary).slice(1).map(function(c){c=c.replace(/^\r?\n/,'').replace(/^--\s*$/,'');var s=c.search(/\r?\n\r?\n/);if(s<0)return null;var h={};c.slice(0,s).split(/\r?\n/).forEach(function(line){var x=line.match(/^([^:]+):\s*(.*)$/);if(x)h[x[1].toLowerCase()]=x[2]});return{headers:h,body:c.slice(s).replace(/^\r?\n\r?\n/,'')}}).filter(Boolean)}
-function parseMhtml(raw){var parts=mhtmlParts(raw),hp=parts.find(function(p){return (p.headers['content-type']||'').toLowerCase().indexOf('text/html')===0});if(!hp)throw Error('MHTML contains no HTML part.');var html=hp.body;if((hp.headers['content-transfer-encoding']||'').toLowerCase()==='quoted-printable')html=html.replace(/=\r?\n/g,'').replace(/=([0-9a-f]{2})/gi,function(_,h){return String.fromCharCode(parseInt(h,16))});var imgs=new Map;parts.forEach(function(p){var ct=(p.headers['content-type']||'').split(';')[0].toLowerCase(),loc=p.headers['content-location'];if(!loc||ct.indexOf('image/')!==0)return;var bytes=(p.headers['content-transfer-encoding']||'').toLowerCase()==='base64'?b64(p.body):new TextEncoder().encode(p.body);imgs.set(loc.split('/').pop(),{type:ct,bytes:bytes})});return{html:html,images:imgs,parts:parts.length}}
-function dataUrl(img){var bin='';for(var i=0;i<img.bytes.length;i+=32768)bin+=String.fromCharCode.apply(null,img.bytes.subarray(i,Math.min(i+32768,img.bytes.length)));return'data:'+img.type+';base64,'+btoa(bin)}
-function getPhotos(d,imgs){return Array.from(d.querySelectorAll('img')).map(function(img){var src=img.getAttribute('src')||'',a=img.closest('a'),href=a?(a.getAttribute('href')||src):src;if(!/\.(jpe?g|png|gif)(\?|$)/i.test(href))return null;var block=img.parentElement&&img.parentElement.parentElement?img.parentElement.parentElement:img.parentElement;var txt=clean(block?block.textContent:'');var fn=href.split('/').pop().split('?')[0];return{filename:fn,text:txt,embedded:imgs?imgs.get(fn)||null:null}}).filter(Boolean)}
-function normName(v){return clean(v).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim()}
-function associate(students,photos){var left=photos.slice();students.forEach(function(s){var n=normName(s.name),i=left.findIndex(function(p){var x=normName(p.text);return x&&(x.indexOf(n)>=0||n.indexOf(x)>=0)});if(i>=0)s.photo=left.splice(i,1)[0]});return left}
-function parse(file){return file.text().then(function(raw){var isM=/\.(mht|mhtml)$/i.test(file.name)||(/multipart\/related/i.test(raw)&&/boundary\s*=/i.test(raw));var html=raw,imgs=null,parts=0;if(isM){var p=parseMhtml(raw);html=p.html;imgs=p.images;parts=p.parts}var d=docFrom(html),m=getMeta(d),s=getStudents(d),ph=getPhotos(d,imgs),left=associate(s.students,ph);return{isMhtml:isM,meta:m,headers:s.headers,students:s.students,photos:ph,unmatched:left,parts:parts,embedded:imgs?imgs.size:0}})}
-function render(r){$('summary').classList.remove('hidden');$('fieldPanel').classList.remove('hidden');$('studentPanel').classList.remove('hidden');var meta=[['Report',r.meta.title],['Teacher',r.meta.teacher],['Subject',r.meta.subject],['Set',r.meta.setName||r.meta.setCode],['Students',r.students.length],['Format',r.isMhtml?'MHTML':'HTML']];$('meta').innerHTML=meta.map(function(x){return'<div class="meta"><small>'+esc(x[0])+'</small><strong>'+esc(x[1]||'Not found')+'</strong></div>'}).join('');$('fields').innerHTML=r.headers.map(function(h){return'<span class="chip">'+esc(h)+'</span>'}).join('');var matched=r.students.filter(function(s){return!!s.photo}).length;$('studentSummary').textContent=r.students.length+' students found · '+matched+' photos matched';$('thead').innerHTML='<tr><th>Photo</th>'+r.headers.map(function(h){return'<th>'+esc(h)+'</th>'}).join('')+'</tr>';$('tbody').innerHTML=r.students.map(function(s){return'<tr><td>'+(s.photo&&s.photo.embedded?'<img class="photo" src="'+dataUrl(s.photo.embedded)+'" alt="">':'—')+'</td>'+r.headers.map(function(h){return'<td>'+esc(s.fields[h])+'</td>'}).join('')+'</tr>'}).join('');$('diagPanel').classList.remove('hidden');$('diag').textContent=JSON.stringify({format:r.isMhtml?'MHTML':'HTML',mimeParts:r.parts||null,embeddedImages:r.embedded||0,detectedFields:r.headers,studentCount:r.students.length,photoGalleryCount:r.photos.length,matchedPhotoCount:matched,unmatchedPhotoCount:r.unmatched.length},null,2)}
-$('file').addEventListener('change',function(e){var f=e.target.files&&e.target.files[0];if(!f)return;status('Reading '+f.name+'…');parse(f).then(function(r){render(r);status('Imported '+r.students.length+' students; '+r.students.filter(function(s){return!!s.photo}).length+' photos matched.',r.unmatched.length?'warn':'ok')}).catch(function(e){console.error(e);status(e.message||'Import failed.','bad')})});
-$('selfTest').addEventListener('click',function(){var s='<html><head><title>Set List</title></head><body><b>Set Profile - Test Class</b><table><tr><td><b>Subject:</b></td><td>Mathematics</td></tr><tr><td><b>Set Name:</b></td><td>Y8 TEST</td></tr></table><table><tr><td></td><td>Surname</td><td>Preferred Name</td><td>Form</td></tr><tr><td>1.</td><td>One</td><td>Alex</td><td>8A</td></tr><tr><td>2.</td><td>Two</td><td>Sam</td><td>8A</td></tr></table></body></html>';try{var d=docFrom(s),m=getMeta(d),x=getStudents(d),ok=m.subject==='Mathematics'&&x.students.length===2&&x.headers.indexOf('Surname')>=0;$('diagPanel').classList.remove('hidden');$('diag').textContent=ok?'PASS — parser self-test worked.':JSON.stringify({meta:m,headers:x.headers,students:x.students},null,2);status(ok?'Self-test passed.':'Self-test failed. See diagnostics.',ok?'ok':'bad')}catch(e){status('Self-test failed: '+e.message,'bad')}});
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Seating Plan — Import Test</title><style>body{font-family:system-ui;margin:0;background:#f5f7fa;color:#18202a}main{max-width:900px;margin:auto;padding:32px 20px}.box{background:white;border:1px solid #ddd;border-radius:12px;padding:24px;margin:16px 0}button,label{display:inline-block;padding:11px 16px;border:1px solid #bbb;border-radius:8px;background:#fff;cursor:pointer}label{background:#285bd6;color:#fff;border-color:#285bd6}input{position:absolute;left:-9999px}.status{margin-top:16px;padding:12px;border-radius:8px;background:#eee}.ok{background:#e9f7ee;color:#17683a}.bad{background:#fff0f0;color:#9e2929}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px;border-bottom:1px solid #ddd}.photo{width:55px;height:65px;object-fit:cover;border-radius:6px}.hidden{display:none}</style></head><body><main><h1>iSAMS Import Test</h1><p>This is Stage 1: local iSAMS report parsing. Files are processed in your browser and are not uploaded.</p><div class="box"><h2>1. Test the app</h2><button id="test" type="button">Run self-test</button><div id="status" class="status">JavaScript loaded: yes. Ready.</div></div><div class="box"><h2>2. Import an iSAMS report</h2><label for="file">Choose HTML / MHT / MHTML</label><input id="file" type="file" accept=".html,.htm,.mht,.mhtml,text/html,application/x-mimearchive"><div id="result" class="hidden"></div></div></main><script>
+(function(){
+  'use strict';
+  var status=document.getElementById('status');
+  var fileInput=document.getElementById('file');
+  var result=document.getElementById('result');
+  function setStatus(text,kind){status.textContent=text;status.className='status '+(kind||'');}
+  function text(el){return (el&&el.textContent||'').replace(/\s+/g,' ').trim();}
+  function headerKey(s){return text({textContent:s}).toLowerCase().replace(/:/g,'');}
+  function findStudentTable(doc){
+    var tables=Array.prototype.slice.call(doc.querySelectorAll('table'));
+    for(var i=0;i<tables.length;i++){
+      var rows=tables[i].querySelectorAll('tr');
+      for(var r=0;r<rows.length;r++){
+        var vals=Array.prototype.slice.call(rows[r].querySelectorAll('td,th')).map(text).map(headerKey);
+        if(vals.indexOf('surname')!==-1 && vals.indexOf('preferred name')!==-1) return tables[i];
+      }
+    }
+    return null;
+  }
+  function parseHtml(html){
+    var doc=new DOMParser().parseFromString(html,'text/html');
+    var table=findStudentTable(doc);
+    if(!table) throw new Error('Could not find an iSAMS Set List table.');
+    var rows=Array.prototype.slice.call(table.querySelectorAll('tr'));
+    var headerRow=null, headers=[];
+    for(var i=0;i<rows.length;i++){
+      var h=Array.prototype.slice.call(rows[i].querySelectorAll('td,th')).map(text);
+      var hk=h.map(headerKey);
+      if(hk.indexOf('surname')!==-1 && hk.indexOf('preferred name')!==-1){headerRow=rows[i];headers=h;break;}
+    }
+    var students=[];
+    if(headerRow){
+      var start=rows.indexOf(headerRow)+1;
+      for(var j=start;j<rows.length;j++){
+        var cells=Array.prototype.slice.call(rows[j].querySelectorAll(':scope > td, :scope > th')).map(text);
+        if(!cells.length) continue;
+        var record={}; headers.forEach(function(h,k){record[h]=cells[k]||'';});
+        var sn=record[headers[headerKey(headers).indexOf('surname')]];
+        var pn=record[headers[headerKey(headers).indexOf('preferred name')]];
+        if(sn||pn) students.push({name:[pn,sn].filter(Boolean).join(' '),fields:record});
+      }
+    }
+    var meta={};
+    Array.prototype.slice.call(doc.querySelectorAll('td')).forEach(function(td){
+      var label=text(td).replace(/:$/,'').toLowerCase();
+      if(['teacher','grade group','subject','set name','set code'].indexOf(label)>=0 && td.nextElementSibling) meta[label]=text(td.nextElementSibling);
+    });
+    return {doc:doc,headers:headers,students:students,meta:meta};
+  }
+  document.getElementById('test').addEventListener('click',function(){
+    try{
+      var fake='<!doctype html><html><body><table><tr><td>Surname</td><td>Preferred Name</td><td>Form</td></tr><tr><td>Test One</td><td>Alex</td><td>8A</td></tr><tr><td>Test Two</td><td>Sam</td><td>8B</td></tr></table></body></html>';
+      var parsed=parseHtml(fake);
+      if(parsed.students.length!==2) throw new Error('Expected 2 students, found '+parsed.students.length);
+      setStatus('Self-test passed — JavaScript and basic HTML parsing are working.','ok');
+    }catch(e){setStatus('Self-test failed: '+e.message,'bad');console.error(e);}
+  });
+  fileInput.addEventListener('change',function(){
+    var file=fileInput.files && fileInput.files[0];
+    if(!file) return;
+    setStatus('Reading '+file.name+'…');
+    file.text().then(function(raw){
+      try{
+        var isMhtml=/\.(mht|mhtml)$/i.test(file.name) || /Content-Type:\s*multipart\/related/i.test(raw);
+        var html=raw;
+        if(isMhtml){
+          // Stage 1 browser smoke test: identify MHTML and locate the HTML MIME part.
+          var boundaryMatch=raw.match(/boundary\s*=\s*(?:"([^"]+)"|([^;\r\n]+))/i);
+          if(!boundaryMatch) throw new Error('MHTML detected, but no MIME boundary was found.');
+          var boundary=boundaryMatch[1]||boundaryMatch[2].trim();
+          var parts=raw.split('--'+boundary);
+          var htmlFound=null;
+          for(var p=0;p<parts.length;p++) if(/^\s*Content-Type:\s*text\/html/i.test(parts[p])){var sep=parts[p].search(/\r?\n\r?\n/);if(sep>=0) htmlFound=parts[p].slice(sep).replace(/^\r?\n\r?\n/,'');break;}
+          if(!htmlFound) throw new Error('No text/html part found in MHTML.');
+          html=htmlFound;
+        }
+        var parsed=parseHtml(html);
+        result.className='box';
+        result.innerHTML='<h2>Import result</h2><p><strong>'+parsed.students.length+'</strong> students found.</p><p><strong>'+parsed.headers.length+'</strong> fields detected: '+parsed.headers.map(function(x){return '<code>'+x.replace(/[&<>]/g,'')+'</code>';}).join(', ')+'</p><p>Report: '+(parsed.meta['set name']||'not detected')+'</p><table><thead><tr><th>Name</th>'+parsed.headers.map(function(h){return '<th>'+h.replace(/[&<>]/g,'')+'</th>';}).join('')+'</tr></thead><tbody>'+parsed.students.map(function(s){return '<tr><td>'+s.name.replace(/[&<>]/g,'')+'</td>'+parsed.headers.map(function(h){return '<td>'+String(s.fields[h]||'').replace(/[&<>]/g,'')+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table>';
+        setStatus('Import parsed successfully.','ok');
+      }catch(e){setStatus('Import failed: '+e.message,'bad');console.error(e);}
+    }).catch(function(e){setStatus('Could not read the file: '+e.message,'bad');});
+  });
 })();
 </script></body></html>
