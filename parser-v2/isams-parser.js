@@ -1,4 +1,4 @@
-/* iSAMS MHTML parser — Build 1.1.3 */
+/* iSAMS MHTML parser — Build 1.1.4 */
 const META=['Set Name','Set Code','Teacher','Linked Teachers','Subject','Grade Group','Set Block','Set Number','Year Group','Form','Academic Year'];
 const clean=v=>String(v??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
 export const normalise=v=>clean(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
@@ -16,7 +16,7 @@ function studentTable(t){const rs=rows(t),hi=rs.findIndex(r=>{const v=vals(r).ma
 // metadata field to be present, then take the nearest preceding one for each class.
 function metadataTables(doc){return[...doc.querySelectorAll('table')].filter(e=>{const t=normalise(e.textContent);return t.includes('set name')&&(t.includes('teacher')||t.includes('set code'))&&t.length<1400})}
 function metadataBefore(table,ms){let best=null;for(const m of ms){if(m.compareDocumentPosition(table)&Node.DOCUMENT_POSITION_FOLLOWING)best=m}return best}
-function meta(el){const t=clean(el?.textContent||''),o={};for(const label of META){const esc=label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),next=META.filter(x=>x!==label).map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');const m=t.match(new RegExp(esc+'\\s*:?\\s*(.+?)(?=\\s+(?:'+next+')\\s*:|$)','i'));if(m)o[label]=clean(m[1])}return o}
+function meta(el){const t=clean(el?.textContent||''),o={};if(!t)return o;const escaped=META.map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));for(let i=0;i<META.length;i++){const next=escaped.filter((_,j)=>j!==i);const re=new RegExp(escaped[i]+'\\s*:?\\s*(.*?)(?=\\s*(?:'+next.join('|')+')\\s*:?|$)','i');const m=t.match(re);if(m)o[META[i]]=clean(m[1])}return o}
 function base(u){try{return decodeURIComponent(new URL(u,'https://isams.invalid/').pathname.split('/').pop()||'')}catch{return String(u||'').split(/[\\/]/).pop()||''}}
 function galleryLabel(img){const p=img.closest('td')||img.parentElement;if(!p)return'';const d=[...p.childNodes].filter(n=>n.nodeType===Node.TEXT_NODE).map(n=>clean(n.nodeValue)).filter(Boolean).join(' ');return d||clean(p.textContent).replace(/\bGrade\s+.*$/i,'').trim()}
 function studentNames(s){const a=[normalise(s.preferredName),normalise(s.surname)],first=normalise(s.fields['First Name']||s.fields['First name']||s.fields['Forename']||'');return new Set([a[0]+' '+a[1],a[1]+' '+a[0],first+' '+a[1],a[1]+' '+first].map(normalise).filter(Boolean))}
