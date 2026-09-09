@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Seating Planner — Parser Test</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <main>
+    <header class="card">
+      <div class="eyebrow">SEATING PLANNER</div>
+      <h1>MHTML Import Test</h1>
+      <p>Parser foundation — Build 1.0.0</p>
+      <label class="button" for="mhtmlFile">Choose iSAMS MHTML</label>
+      <input id="mhtmlFile" type="file" accept="multipart/related,.mhtml,.mht,text/html">
+      <div id="status" class="status">Ready. No student data is uploaded anywhere by this page.</div>
+    </header>
+
+    <section class="card">
+      <div class="section-head">
+        <div><h2>Import report</h2><p>Nothing is saved yet. This stage only parses and reports.</p></div>
+      </div>
+      <div id="report" class="empty">Choose an MHTML file to begin.</div>
+    </section>
+
+    <section class="card">
+      <h2>Parser checks</h2>
+      <div id="checks" class="checks"></div>
+    </section>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
