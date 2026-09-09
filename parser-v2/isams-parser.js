@@ -1,4 +1,4 @@
-/* iSAMS MHTML parser — Build 1.1.2 */
+/* iSAMS MHTML parser — Build 1.1.3 */
 const META=['Set Name','Set Code','Teacher','Linked Teachers','Subject','Grade Group','Set Block','Set Number','Year Group','Form','Academic Year'];
 const clean=v=>String(v??'').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
 export const normalise=v=>clean(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
@@ -12,7 +12,9 @@ function rows(t){const out=[];for(const x of t.children){if(x.tagName==='TR')out
 function cells(r){return[...r.children].filter(x=>/^(TD|TH)$/i.test(x.tagName))}
 function vals(r){let v=cells(r).map(x=>clean(x.textContent));if(/^\d+\.$/.test(v[0]||''))v=v.slice(1);return v}
 function studentTable(t){const rs=rows(t),hi=rs.findIndex(r=>{const v=vals(r).map(normalise);return v.includes('surname')&&v.includes('preferred name')});if(hi<0)return null;let hs=vals(rs[hi]);if(!normalise(hs[0]))hs=hs.slice(1);const si=hs.findIndex(x=>normalise(x)==='surname'),pi=hs.findIndex(x=>normalise(x)==='preferred name');if(si<0||pi<0)return null;const students=[];for(const r of rs.slice(hi+1)){const v=vals(r);if(!v.length)continue;const fields={};hs.forEach((h,i)=>fields[h]=v[i]??'');if(!v[si]&&!v[pi])continue;students.push({sourceRow:students.length+1,surname:v[si]||'',preferredName:v[pi]||'',fields,photo:null})}return{headers:hs,students}}
-function metadataTables(doc){return[...doc.querySelectorAll('table')].filter(e=>{const t=normalise(e.textContent);return t.includes('teacher')&&t.includes('set name')&&t.includes('set code')&&t.length<900})}
+// iSAMS report layouts vary. Identify plausible profile tables without requiring every
+// metadata field to be present, then take the nearest preceding one for each class.
+function metadataTables(doc){return[...doc.querySelectorAll('table')].filter(e=>{const t=normalise(e.textContent);return t.includes('set name')&&(t.includes('teacher')||t.includes('set code'))&&t.length<1400})}
 function metadataBefore(table,ms){let best=null;for(const m of ms){if(m.compareDocumentPosition(table)&Node.DOCUMENT_POSITION_FOLLOWING)best=m}return best}
 function meta(el){const t=clean(el?.textContent||''),o={};for(const label of META){const esc=label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),next=META.filter(x=>x!==label).map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');const m=t.match(new RegExp(esc+'\\s*:?\\s*(.+?)(?=\\s+(?:'+next+')\\s*:|$)','i'));if(m)o[label]=clean(m[1])}return o}
 function base(u){try{return decodeURIComponent(new URL(u,'https://isams.invalid/').pathname.split('/').pop()||'')}catch{return String(u||'').split(/[\\/]/).pop()||''}}
